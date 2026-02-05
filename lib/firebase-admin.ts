@@ -20,43 +20,77 @@ function getAdminApp(): App {
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
   // Handle private key - accepts multiple formats for easier configuration
   let privateKey = process.env.FIREBASE_PRIVATE_KEY
-  if (privateKey) {
-    // Remove any surrounding quotes
-    privateKey = privateKey.trim().replace(/^["']|["']$/g, '')
-    
-    // Replace escaped newlines with actual newlines
-    privateKey = privateKey.replace(/\\n/g, '\n')
-    
-    // If it doesn't have BEGIN/END markers, assume it's just the key content
-    if (!privateKey.includes('BEGIN PRIVATE KEY')) {
-      // Add the PEM markers and format with newlines every 64 characters
-      const keyContent = privateKey.replace(/\s+/g, '') // Remove all whitespace
-      // Split into 64 character chunks and join with newlines
-      const formattedKey = keyContent.match(/.{1,64}/g)?.join('\n') || keyContent
-      privateKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----\n`
-    } else {
-      // Already has markers, just ensure proper formatting
-      // Ensure newlines after BEGIN and before END
-      privateKey = privateKey.replace(/-----BEGIN PRIVATE KEY-----/g, '-----BEGIN PRIVATE KEY-----\n')
-      privateKey = privateKey.replace(/-----END PRIVATE KEY-----/g, '\n-----END PRIVATE KEY-----\n')
-      // Clean up any double newlines
-      privateKey = privateKey.replace(/\n{3,}/g, '\n\n')
-    }
-  }
-
+  
   if (!clientEmail || !privateKey) {
     throw new Error(
       'Firebase Admin credentials not found. Please set FIREBASE_CLIENT_EMAIL and FIREBASE_PRIVATE_KEY environment variables.'
     )
   }
 
-  adminApp = initializeApp({
-    credential: cert({
-      projectId,
-      clientEmail,
-      privateKey
+  // Remove any surrounding quotes
+  privateKey = privateKey.trim().replace(/^["']|["']$/g, '')
+  
+  // Replace escaped newlines with actual newlines (from JSON format)
+  privateKey = privateKey.replace(/\\n/g, '\n')
+  
+  // Extract key content (remove markers if present)
+  let keyContent = privateKey
+  if (privateKey.includes('BEGIN PRIVATE KEY')) {
+    // Extract content between markers
+    const match = privateKey.match(/-----BEGIN PRIVATE KEY-----\s*([\s\S]*?)\s*-----END PRIVATE KEY-----/)
+    if (match && match[1]) {
+      keyContent = match[1]
+    } else {
+      // If markers are present but no content found, try to extract anyway
+      keyContent = privateKey.replace(/-----BEGIN PRIVATE KEY-----/g, '')
+        .replace(/-----END PRIVATE KEY-----/g, '')
+        .trim()
+    }
+  }
+  
+  // Remove all whitespace and newlines to get clean base64 content
+  keyContent = keyContent.replace(/\s+/g, '').replace(/\n/g, '')
+  
+  // Validate key length (RSA private keys are typically 1600-1700 characters in base64)
+  if (keyContent.length < 1000) {
+    throw new Error(
+      `Firebase private key appears to be incomplete. Expected ~1600-1700 characters, got ${keyContent.length}. ` +
+      'Please check that you copied the complete private key. The key should be approximately 1672 characters long.'
+    )
+  }
+  
+  // Additional validation: check if it looks like valid base64
+  if (!/^[A-Za-z0-9+/=]+$/.test(keyContent)) {
+    throw new Error(
+      'Firebase private key contains invalid characters. The key should only contain base64 characters (A-Z, a-z, 0-9, +, /, =).'
+    )
+  }
+  
+  // Format with newlines every 64 characters (PEM standard)
+  const formattedKey = keyContent.match(/.{1,64}/g)?.join('\n') || keyContent
+  
+  // Create properly formatted PEM key
+  privateKey = `-----BEGIN PRIVATE KEY-----\n${formattedKey}\n-----END PRIVATE KEY-----\n`
+  
+  // Final validation: ensure the formatted key looks correct
+  if (!privateKey.includes('-----BEGIN PRIVATE KEY-----') || !privateKey.includes('-----END PRIVATE KEY-----')) {
+    throw new Error('Failed to format private key correctly. Please check the key format.')
+  }
+
+  try {
+    adminApp = initializeApp({
+      credential: cert({
+        projectId,
+        clientEmail,
+        privateKey
+      })
     })
-  })
+  } catch (error: any) {
+    throw new Error(
+      `Failed to initialize Firebase Admin: ${error.message}. ` +
+      'Please verify that FIREBASE_PRIVATE_KEY contains the complete private key from your Firebase service account JSON.'
+    )
+  }
 
   return adminApp
 }
