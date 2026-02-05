@@ -27,6 +27,9 @@ function getAdminApp(): App {
     )
   }
 
+  // Store original length for debugging
+  const originalLength = privateKey.length
+  
   // Remove any surrounding quotes
   privateKey = privateKey.trim().replace(/^["']|["']$/g, '')
   
@@ -54,8 +57,12 @@ function getAdminApp(): App {
   // Validate key length (RSA private keys are typically 1600-1700 characters in base64)
   if (keyContent.length < 1000) {
     throw new Error(
-      `Firebase private key appears to be incomplete. Expected ~1600-1700 characters, got ${keyContent.length}. ` +
-      'Please check that you copied the complete private key. The key should be approximately 1672 characters long.'
+      `Firebase private key appears to be incomplete. ` +
+      `Original length: ${originalLength} characters, ` +
+      `After processing: ${keyContent.length} characters. ` +
+      `Expected ~1600-1700 characters. ` +
+      'Please check that you copied the COMPLETE private key from the JSON file. ' +
+      'The key should be approximately 1672 characters long when cleaned.'
     )
   }
   
