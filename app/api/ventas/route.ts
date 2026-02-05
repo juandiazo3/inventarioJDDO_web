@@ -93,7 +93,8 @@ export async function POST(request: NextRequest) {
         cantidad: detalle.cantidad,
         precio_unitario: detalle.precio_unitario,
         descuento: detalle.descuento || 0,
-        subtotal: detalle.subtotal
+        subtotal: detalle.subtotal,
+        user_id: userId // Agregar user_id para las reglas de seguridad
       })
 
       // Actualizar stock

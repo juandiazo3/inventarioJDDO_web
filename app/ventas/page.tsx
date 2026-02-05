@@ -253,7 +253,8 @@ export default function VentasPage() {
           cantidad: item.cantidad,
           precio_unitario: item.precio_unitario,
           descuento: item.descuento,
-          subtotal: item.subtotal
+          subtotal: item.subtotal,
+          user_id: user.uid // Agregar user_id para las reglas de seguridad
         })
 
         // Actualizar stock
