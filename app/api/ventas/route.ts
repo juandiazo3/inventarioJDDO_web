@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       .get()
 
     const ventas = await Promise.all(ventasSnapshot.docs.map(async (doc) => {
-      const venta = { id: doc.id, ...doc.data() }
+      const venta: any = { id: doc.id, ...doc.data() }
       if (venta.cliente_id) {
         const clienteDoc = await adminDb.collection('clientes').doc(venta.cliente_id).get()
         if (clienteDoc.exists) {
