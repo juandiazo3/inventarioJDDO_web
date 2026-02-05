@@ -18,7 +18,18 @@ function getAdminApp(): App {
   // Initialize Firebase Admin
   const projectId = process.env.FIREBASE_PROJECT_ID || 'inventariojddo'
   const clientEmail = process.env.FIREBASE_CLIENT_EMAIL
-  const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n')
+  // Handle private key with proper line breaks
+  // Replace escaped newlines and also handle actual newlines
+  let privateKey = process.env.FIREBASE_PRIVATE_KEY
+  if (privateKey) {
+    // Replace escaped newlines first
+    privateKey = privateKey.replace(/\\n/g, '\n')
+    // Ensure proper PEM format (in case newlines are missing)
+    if (!privateKey.includes('\n')) {
+      // If no newlines, try to add them at key boundaries
+      privateKey = privateKey.replace(/(-----BEGIN PRIVATE KEY-----)(.+?)(-----END PRIVATE KEY-----)/s, '$1\n$2\n$3')
+    }
+  }
 
   if (!clientEmail || !privateKey) {
     throw new Error(
