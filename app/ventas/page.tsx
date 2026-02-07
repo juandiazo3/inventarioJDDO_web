@@ -104,8 +104,8 @@ export default function VentasPage() {
     try {
       const q = query(collection(db, 'ventas'), where('user_id', '==', userId))
       const snapshot = await getDocs(q)
-      const ventasData = await Promise.all(snapshot.docs.map(async (doc) => {
-        const venta = { id: doc.id, ...doc.data() }
+      const ventasData = await Promise.all(snapshot.docs.map(async (ventaDoc) => {
+        const venta: any = { id: ventaDoc.id, ...ventaDoc.data() }
         if (venta.cliente_id) {
           const clienteDoc = await getDoc(doc(db, 'clientes', venta.cliente_id))
           if (clienteDoc.exists()) {
