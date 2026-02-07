@@ -28,9 +28,6 @@ export async function GET(
     }
 
     const venta = ventaDoc.data()
-    if (!venta) {
-      return NextResponse.json({ error: 'Venta no encontrada' }, { status: 404 })
-    }
 
     // Obtener detalles
     const detallesSnapshot = await adminDb.collection('detalle_ventas')

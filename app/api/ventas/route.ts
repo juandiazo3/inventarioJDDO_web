@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getAdminDb, verifyIdToken } from '@/lib/firebase-admin'
+import { enviarFacturaPorEmail, EmailConfig } from '@/lib/email'
+import { generarPDFFactura } from '@/lib/generador-pdf'
 
 const adminDb = getAdminDb()
 
@@ -93,8 +95,7 @@ export async function POST(request: NextRequest) {
         cantidad: detalle.cantidad,
         precio_unitario: detalle.precio_unitario,
         descuento: detalle.descuento || 0,
-        subtotal: detalle.subtotal,
-        user_id: userId // Agregar user_id para las reglas de seguridad
+        subtotal: detalle.subtotal
       })
 
       // Actualizar stock
@@ -111,7 +112,116 @@ export async function POST(request: NextRequest) {
       numero_factura_actual: numFact.toString()
     }, { merge: true })
 
-    // TODO: Generar PDF y enviar email (se implementará después)
+    // Generar PDF y enviar email al cliente si tiene email configurado
+    try {
+      // Obtener detalles completos con información de productos
+      const detallesSnapshot = await adminDb.collection('detalle_ventas')
+        .where('venta_id', '==', ventaRef.id)
+        .get()
+
+      const detallesCompletos = await Promise.all(detallesSnapshot.docs.map(async (doc) => {
+        const detalle = doc.data()
+        const productoDoc = await adminDb.collection('productos').doc(detalle.producto_id).get()
+        if (productoDoc.exists) {
+          const productoData = productoDoc.data()
+          return {
+            codigo: productoData?.codigo || '',
+            nombre: productoData?.nombre || 'Producto sin nombre',
+            cantidad: detalle.cantidad,
+            precio_unitario: detalle.precio_unitario,
+            subtotal: detalle.subtotal
+          }
+        }
+        return {
+          codigo: '',
+          nombre: 'Producto eliminado',
+          cantidad: detalle.cantidad,
+          precio_unitario: detalle.precio_unitario,
+          subtotal: detalle.subtotal
+        }
+      }))
+
+      // Obtener datos del cliente
+      let clienteData: any = {
+        nombre: 'Cliente General',
+        tipo_documento: 'CC',
+        numero_documento: '0'
+      }
+      if (ventaData.cliente_id) {
+        const clienteDoc = await adminDb.collection('clientes').doc(ventaData.cliente_id).get()
+        if (clienteDoc.exists) {
+          clienteData = clienteDoc.data()
+        }
+      }
+
+      // Preparar datos para PDF y email
+      const ventaDataForPDF = {
+        numero_factura,
+        fecha_venta: ventaData.fecha_venta,
+        subtotal,
+        iva,
+        descuento,
+        total
+      }
+
+      const empresaData = {
+        empresa_nombre: config?.empresa_nombre || 'Mi Empresa',
+        empresa_nit: config?.empresa_nit || '',
+        empresa_direccion: config?.empresa_direccion || '',
+        empresa_telefono: config?.empresa_telefono || '',
+        empresa_email: config?.empresa_email || ''
+      }
+
+      // Verificar si hay configuración de email y email del cliente
+      const emailCliente = clienteData?.email
+      const tieneConfigEmail = 
+        config?.empresa_email && 
+        config?.email_password && 
+        config?.email_smtp_server && 
+        config?.email_smtp_port
+
+      if (tieneConfigEmail && emailCliente) {
+        // Generar PDF
+        const pdfBuffer = await generarPDFFactura(
+          ventaDataForPDF,
+          detallesCompletos,
+          clienteData,
+          empresaData
+        )
+
+        // Configurar email
+        const emailConfig: EmailConfig = {
+          smtp_server: config.email_smtp_server,
+          smtp_port: config.email_smtp_port,
+          email: config.empresa_email,
+          password: config.email_password
+        }
+
+        // Enviar email
+        await enviarFacturaPorEmail(emailConfig, {
+          to: emailCliente,
+          clienteNombre: clienteData.nombre,
+          numeroFactura: numero_factura,
+          fechaVenta: ventaData.fecha_venta,
+          total,
+          pdfBuffer,
+          empresaNombre: empresaData.empresa_nombre
+        })
+
+        console.log(`Factura ${numero_factura} enviada por email a ${emailCliente}`)
+      } else {
+        if (!tieneConfigEmail) {
+          console.log('Configuración de email incompleta, no se envió el correo')
+        }
+        if (!emailCliente) {
+          console.log('Cliente no tiene email configurado, no se envió el correo')
+        }
+      }
+    } catch (emailError: any) {
+      // No fallar la creación de la venta si hay error en el email
+      console.error('Error al enviar email de factura:', emailError)
+      // Continuar con la respuesta exitosa de la venta
+    }
 
     return NextResponse.json({
       id: ventaRef.id,

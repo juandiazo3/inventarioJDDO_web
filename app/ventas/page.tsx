@@ -104,12 +104,12 @@ export default function VentasPage() {
     try {
       const q = query(collection(db, 'ventas'), where('user_id', '==', userId))
       const snapshot = await getDocs(q)
-      const ventasData = await Promise.all(snapshot.docs.map(async (ventaDoc) => {
-        const venta: any = { id: ventaDoc.id, ...ventaDoc.data() }
+      const ventasData = await Promise.all(snapshot.docs.map(async (doc) => {
+        const venta = { id: doc.id, ...doc.data() }
         if (venta.cliente_id) {
           const clienteDoc = await getDoc(doc(db, 'clientes', venta.cliente_id))
           if (clienteDoc.exists()) {
-            venta.cliente_nombre = clienteDoc.data()?.nombre
+            venta.cliente_nombre = clienteDoc.data().nombre
           }
         }
         return venta
@@ -253,8 +253,7 @@ export default function VentasPage() {
           cantidad: item.cantidad,
           precio_unitario: item.precio_unitario,
           descuento: item.descuento,
-          subtotal: item.subtotal,
-          user_id: user.uid // Agregar user_id para las reglas de seguridad
+          subtotal: item.subtotal
         })
 
         // Actualizar stock
